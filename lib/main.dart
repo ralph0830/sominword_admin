@@ -19,8 +19,9 @@ class AdminApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Admin - 기기별 단어 관리',
+      title: '관리자 페이지',
       theme: ThemeData(
+        fontFamily: 'NotoSansKR', // 기본 폰트 적용
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
       home: const AuthWrapper(),
@@ -76,7 +77,7 @@ class AuthWrapper extends StatelessWidget {
               final isApproved = adminData?['isApproved'] ?? false;
               final email = adminData?['email'] as String?;
               
-              debugPrint('🔍 [DEBUG] AuthWrapper: Admin 문서 존재: [33m${adminSnapshot.data?.exists}[0m');
+              debugPrint('🔍 [DEBUG] AuthWrapper: Admin 문서 존재:  [33m${adminSnapshot.data?.exists} [0m');
               debugPrint('🔍 [DEBUG] AuthWrapper: Admin 데이터: $adminData');
               debugPrint('🔍 [DEBUG] AuthWrapper: isSuperAdmin: $isSuperAdmin, isApproved: $isApproved');
               
@@ -356,7 +357,6 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('🔍 [DEBUG] LoginPage build 호출 - _errorMessage: $_errorMessage, _isLoading: $_isLoading');
     return Scaffold(
       appBar: AppBar(
         title: Text(_isSignUp ? '관리자 신청' : '관리자 로그인'),
@@ -611,22 +611,6 @@ class DeviceListPage extends StatelessWidget {
                 );
               },
             ),
-          if (isSuperAdmin)
-            IconButton(
-              icon: const Icon(Icons.swap_horiz),
-              onPressed: () {
-                _showDataMigrationDialog(context);
-              },
-              tooltip: '데이터 이전',
-            ),
-          if (isSuperAdmin)
-            IconButton(
-              icon: const Icon(Icons.download),
-              onPressed: () {
-                _showRootWordsMigrationDialog(context);
-              },
-              tooltip: '루트 words 마이그레이션',
-            ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
@@ -742,15 +726,14 @@ class DeviceListPage extends StatelessWidget {
                             ),
                         ],
                       ),
-                      // 단어 개수 표시 (슈퍼관리자만)
-                      if (isSuperAdmin)
-                        StreamBuilder<QuerySnapshot>(
-                          stream: FirebaseFirestore.instance.collection('devices').doc(deviceId).collection('words').snapshots(),
-                          builder: (context, wordSnap) {
-                            final count = wordSnap.data?.docs.length ?? 0;
-                            return Text('단어: $count개', style: const TextStyle(color: Colors.deepPurple));
-                          },
-                        ),
+                      // [변경] 단어 개수는 모든 사용자에게 표시
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance.collection('devices').doc(deviceId).collection('words').snapshots(),
+                        builder: (context, wordSnap) {
+                          final count = wordSnap.data?.docs.length ?? 0;
+                          return Text('단어: $count개', style: const TextStyle(color: Colors.deepPurple));
+                        },
+                      ),
                       if (lastActive != null)
                         Text('마지막 활동: ${_formatDate(lastActive.toDate())}'),
                     ],
@@ -821,419 +804,6 @@ class DeviceListPage extends StatelessWidget {
       return '${difference.inMinutes}분 전';
     } else {
       return '방금 전';
-    }
-  }
-
-  void _showDataMigrationDialog(BuildContext context) {
-    final targetDeviceIdController = TextEditingController(text: 'bcc12613-7311-4c91-bed6-3ebc0d02915f');
-    
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('데이터 이전'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('모든 기기의 단어를 특정 기기로 이전합니다.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: targetDeviceIdController,
-              decoration: const InputDecoration(
-                labelText: '대상 기기 ID',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('취소'),
-          ),
-                ElevatedButton(
-            onPressed: () async {
-              final targetDeviceId = targetDeviceIdController.text.trim();
-              if (targetDeviceId.isEmpty) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('대상 기기 ID를 입력해주세요.')),
-                );
-                return;
-              }
-              
-              Navigator.pop(ctx);
-              await _migrateAllWords(context, targetDeviceId);
-            },
-            child: const Text('이전 시작'),
-                ),
-              ],
-            ),
-    );
-  }
-
-  void _showRootWordsMigrationDialog(BuildContext context) {
-    final targetDeviceIdController = TextEditingController(text: 'bcc12613-7311-4c91-bed6-3ebc0d02915f');
-    
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('루트 words 마이그레이션'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Firestore 루트의 words 컬렉션에 있는 모든 단어를 특정 기기로 이전합니다.'),
-            const SizedBox(height: 16),
-            const Text('⚠️ 주의: 이 작업은 1회성 마이그레이션입니다.', 
-              style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: targetDeviceIdController,
-              decoration: const InputDecoration(
-                labelText: '대상 기기 ID',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('취소'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final targetDeviceId = targetDeviceIdController.text.trim();
-              if (targetDeviceId.isEmpty) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('대상 기기 ID를 입력해주세요.')),
-                );
-                return;
-              }
-              
-              Navigator.pop(ctx);
-              await _migrateRootWordsToDevice(context, targetDeviceId);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            child: const Text('마이그레이션 시작', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _migrateAllWords(BuildContext context, String targetDeviceId) async {
-    final firestore = FirebaseFirestore.instance;
-    
-    debugPrint('🔍 [DEBUG] 데이터 이전 시작 - targetDeviceId: $targetDeviceId');
-    
-    // 진행 상황을 보여주는 다이얼로그
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        title: Text('데이터 이전 중...'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('모든 기기의 단어를 이전하고 있습니다.'),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      // 1. 모든 기기 목록 가져오기
-      debugPrint('🔍 [DEBUG] 기기 목록 조회 중...');
-      final devicesSnapshot = await firestore.collection('devices').get();
-      debugPrint('🔍 [DEBUG] 총 ${devicesSnapshot.docs.length}개 기기 발견');
-      
-      int totalWordsMigrated = 0;
-      
-      for (final deviceDoc in devicesSnapshot.docs) {
-        final deviceId = deviceDoc.id;
-        final deviceData = deviceDoc.data();
-        final deviceName = deviceData['deviceName'] ?? 'Unknown Device';
-        
-        debugPrint('🔍 [DEBUG] 기기 처리 중: $deviceName ($deviceId)');
-        
-        // 대상 기기는 건너뛰기
-        if (deviceId == targetDeviceId) {
-          debugPrint('🔍 [DEBUG] 대상 기기이므로 건너뛰기');
-          continue;
-        }
-        
-        // 2. 각 기기의 단어들 가져오기
-        final wordsPath = 'devices/$deviceId/words';
-        debugPrint('🔍 [DEBUG] 단어 조회 경로: $wordsPath');
-        
-        final wordsSnapshot = await firestore.collection(wordsPath).get();
-        debugPrint('🔍 [DEBUG] $deviceName에서 ${wordsSnapshot.docs.length}개 단어 발견');
-        
-        if (wordsSnapshot.docs.isEmpty) {
-          debugPrint('🔍 [DEBUG] 단어가 없으므로 건너뛰기');
-          continue;
-        }
-        
-        // 3. 각 단어를 대상 기기로 복사
-        final targetWordsPath = 'devices/$targetDeviceId/words';
-        debugPrint('🔍 [DEBUG] 대상 경로: $targetWordsPath');
-        
-        for (final wordDoc in wordsSnapshot.docs) {
-          final wordData = wordDoc.data();
-          final englishWord = wordData['english_word'] ?? wordData['englishWord'] ?? wordData['word'] ?? wordData['english'] ?? '';
-          
-          debugPrint('🔍 [DEBUG] 단어 처리 중: $englishWord');
-          
-          // 중복 체크
-          final existingWords = await firestore
-              .collection(targetWordsPath)
-              .where('englishWord', isEqualTo: englishWord)
-              .get();
-          
-          if (existingWords.docs.isNotEmpty) {
-            debugPrint('🔍 [DEBUG] 중복 단어이므로 건너뛰기: $englishWord');
-            continue; // 중복이면 건너뛰기
-          }
-          
-          // 단어 복사
-          debugPrint('🔍 [DEBUG] 단어 복사 중: $englishWord');
-          await firestore.collection(targetWordsPath).add({
-            'englishWord': englishWord,
-            'koreanPartOfSpeech': wordData['korean_part_of_speech'] ?? wordData['koreanPartOfSpeech'] ?? wordData['partOfSpeech'] ?? wordData['pos'] ?? '',
-            'koreanMeaning': wordData['korean_meaning'] ?? wordData['koreanMeaning'] ?? wordData['meaning'] ?? wordData['korean'] ?? '',
-            'inputTimestamp': wordData['input_timestamp'] ?? wordData['inputTimestamp'] ?? wordData['timestamp'] ?? FieldValue.serverTimestamp(),
-            'isFavorite': wordData['isFavorite'] ?? wordData['favorite'] ?? false,
-          });
-          
-          totalWordsMigrated++;
-          debugPrint('🔍 [DEBUG] 단어 복사 완료: $englishWord (총 $totalWordsMigrated개)');
-        }
-      }
-      
-      debugPrint('🔍 [DEBUG] 데이터 이전 완료 - 총 $totalWordsMigrated개 단어');
-      
-      // 진행 상황 다이얼로그 닫기
-      if (context.mounted) {
-        Navigator.pop(context);
-        
-        // 완료 메시지
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('이전 완료! 총 $totalWordsMigrated개의 단어가 $targetDeviceId 기기로 이전되었습니다.'),
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-      
-    } catch (e) {
-      debugPrint('🔍 [DEBUG] 데이터 이전 실패: $e');
-      
-      // 오류 발생 시 다이얼로그 닫기
-      if (context.mounted) {
-        Navigator.pop(context);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('이전 실패: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  // 슈퍼 관리자 문서 생성
-  Future<void> createSuperAdminDocument(BuildContext context) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('account')
-          .doc('ralph0830@gmail.com')
-          .set({
-        'email': 'ralph0830@gmail.com',
-        'uid': 'BaEfFvIooSREqbZ9q9KbE7pZr9E2',
-        'isSuperAdmin': true,
-        'isApproved': true,
-        'approvedAt': FieldValue.serverTimestamp(),
-        'approvedBy': 'system',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('슈퍼 관리자 문서가 생성되었습니다.')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('문서 생성 실패: $e')),
-        );
-      }
-    }
-  }
-
-  // 루트 words 컬렉션의 모든 단어를 특정 기기로 마이그레이션 (상세 디버그 버전)
-  Future<void> _migrateRootWordsToDevice(BuildContext context, String targetDeviceId) async {
-    final firestore = FirebaseFirestore.instance;
-    
-    debugPrint('🔍 [DEBUG] 루트 words 마이그레이션 시작 - targetDeviceId: $targetDeviceId');
-    
-    // 진행 상황을 보여주는 다이얼로그
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
-        title: Text('루트 words 마이그레이션 중...'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('루트 words 컬렉션의 모든 단어를 이전하고 있습니다.'),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      // 1. 루트 words 컬렉션 조회
-      debugPrint('🔍 [DEBUG] 루트 words 컬렉션 조회 중...');
-      final rootWordsSnapshot = await firestore.collection('words').get();
-      debugPrint('🔍 [DEBUG] 루트 words에서 ${rootWordsSnapshot.docs.length}개 단어 발견');
-      
-      if (rootWordsSnapshot.docs.isEmpty) {
-        debugPrint('🔍 [DEBUG] 루트 words에 단어가 없음');
-        if (context.mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('루트 words 컬렉션에 단어가 없습니다.')),
-          );
-        }
-        return;
-      }
-      
-      // 2. 대상 기기의 기존 단어들 조회 (중복 체크용)
-      final targetWordsPath = 'devices/$targetDeviceId/words';
-      debugPrint('🔍 [DEBUG] 대상 경로: $targetWordsPath');
-      
-      debugPrint('🔍 [DEBUG] 대상 기기의 기존 단어들 조회 중...');
-      final existingWordsSnapshot = await firestore.collection(targetWordsPath).get();
-      debugPrint('🔍 [DEBUG] 대상 기기에 기존 ${existingWordsSnapshot.docs.length}개 단어 존재');
-      
-      // 기존 단어들을 Map으로 변환 (빠른 중복 체크용)
-      final existingWordsMap = <String, Map<String, dynamic>>{};
-      for (final doc in existingWordsSnapshot.docs) {
-        final data = doc.data();
-        final key = '${data['english_word']}_${data['korean_part_of_speech']}_${data['korean_meaning']}';
-        existingWordsMap[key] = data;
-        debugPrint('🔍 [DEBUG] 기존 단어: $key');
-      }
-      
-      int totalWordsMigrated = 0;
-      int duplicateWords = 0;
-      int skippedWords = 0;
-      int errorWords = 0;
-      
-      // 3. 각 단어를 대상 기기로 복사
-      for (final wordDoc in rootWordsSnapshot.docs) {
-        final wordData = wordDoc.data();
-        final originalId = wordDoc.id;
-        
-        debugPrint('🔍 [DEBUG] ===== 루트 단어 처리 시작 =====');
-        debugPrint('🔍 [DEBUG] 원본 ID: $originalId');
-        debugPrint('🔍 [DEBUG] 원본 데이터 전체: $wordData');
-        debugPrint('🔍 [DEBUG] 원본 데이터 타입: [33m$wordData.runtimeType[0m');
-        debugPrint('🔍 [DEBUG] 원본 데이터 키들: ${wordData.keys.toList()}');
-
-        // 각 필드별로 값과 null 여부 출력
-        for (final key in ['english_word', 'korean_part_of_speech', 'korean_meaning', 'input_timestamp']) {
-          debugPrint('🔍 [DEBUG] $key: '
-            'exists=${wordData.containsKey(key)}, '
-            'value="${wordData.containsKey(key) ? wordData[key] : '키 없음'}", '
-            'type=${wordData.containsKey(key) ? wordData[key]?.runtimeType : '키 없음'}');
-        }
-
-        final englishWord = wordData['english_word'] ?? '';
-        final koreanPartOfSpeech = wordData['korean_part_of_speech'] ?? '';
-        final koreanMeaning = wordData['korean_meaning'] ?? '';
-        debugPrint('🔍 [DEBUG] 추출된 영어: "$englishWord"');
-        debugPrint('🔍 [DEBUG] 추출된 품사: "$koreanPartOfSpeech"');
-        debugPrint('🔍 [DEBUG] 추출된 뜻: "$koreanMeaning"');
-        
-        // 중복 체크 (Map 사용으로 빠른 검색)
-        final checkKey = '${englishWord}_${koreanPartOfSpeech}_$koreanMeaning';
-        if (existingWordsMap.containsKey(checkKey)) {
-          debugPrint('🔍 [DEBUG] ❌ 중복 발견: $checkKey');
-          debugPrint('🔍 [DEBUG] 기존 데이터: ${existingWordsMap[checkKey]}');
-          duplicateWords++;
-          continue;
-        }
-        
-        debugPrint('🔍 [DEBUG] ✅ 중복 없음, 복사 진행');
-        
-        // 단어 복사 (원본 ID 보존)
-        try {
-          final newData = {
-            'englishWord': englishWord,
-            'koreanPartOfSpeech': koreanPartOfSpeech,
-            'koreanMeaning': koreanMeaning,
-            'inputTimestamp': wordData['input_timestamp'] ?? wordData['inputTimestamp'] ?? wordData['timestamp'] ?? FieldValue.serverTimestamp(),
-            'isFavorite': wordData['isFavorite'] ?? wordData['favorite'] ?? false,
-            'migratedFrom': 'root_words',
-            'originalId': originalId,
-          };
-          
-          debugPrint('🔍 [DEBUG] 복사할 데이터: $newData');
-          
-          await firestore.collection(targetWordsPath).doc(originalId).set(newData);
-          
-          totalWordsMigrated++;
-          debugPrint('🔍 [DEBUG] ✅ 복사 성공: $englishWord (ID: $originalId, 총 $totalWordsMigrated개)');
-          
-        } catch (e) {
-          debugPrint('🔍 [DEBUG] ❌ 복사 실패: $englishWord (ID: $originalId)');
-          debugPrint('🔍 [DEBUG] 에러 내용: $e');
-          errorWords++;
-        }
-        
-        debugPrint('🔍 [DEBUG] ===== 루트 단어 처리 완료 =====');
-      }
-      
-      debugPrint('🔍 [DEBUG] ===== 마이그레이션 완료 요약 =====');
-      debugPrint('🔍 [DEBUG] 총 처리 단어: ${rootWordsSnapshot.docs.length}개');
-      debugPrint('🔍 [DEBUG] 성공: $totalWordsMigrated개');
-      debugPrint('🔍 [DEBUG] 중복: $duplicateWords개');
-      debugPrint('🔍 [DEBUG] 실패: $errorWords개');
-      debugPrint('🔍 [DEBUG] 건너뛴 단어: $skippedWords개');
-      
-      // 진행 상황 다이얼로그 닫기
-      if (context.mounted) {
-        Navigator.pop(context);
-        
-        // 완료 메시지
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('루트 words 마이그레이션 완료!\n성공: $totalWordsMigrated개, 중복: $duplicateWords개, 실패: $errorWords개'),
-            duration: const Duration(seconds: 8),
-          ),
-        );
-      }
-      
-    } catch (e) {
-      debugPrint('🔍 [DEBUG] ❌ 루트 words 마이그레이션 전체 실패: $e');
-      
-      // 오류 발생 시 다이얼로그 닫기
-      if (context.mounted) {
-        Navigator.pop(context);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('루트 words 마이그레이션 실패: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
   }
 
@@ -1329,6 +899,7 @@ class DeviceListPage extends StatelessWidget {
         .collection('devices')
         .where('ownerEmail', isEqualTo: email)
         .get();
+    if (!context.mounted) return; // [추가] async gap 후 context 사용 보호
     final devices = devicesSnapshot.docs
         .where((doc) => doc.id != fromDeviceId)
         .toList();
@@ -1343,7 +914,6 @@ class DeviceListPage extends StatelessWidget {
       return;
     }
     String? selectedDeviceId;
-    String? selectedDeviceName;
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -1369,7 +939,6 @@ class DeviceListPage extends StatelessWidget {
                 onChanged: (val) {
                   setState(() {
                     selectedDeviceId = val;
-                    selectedDeviceName = devices.firstWhere((d) => d.id == val).data()['deviceName'] ?? val;
                   });
                 },
               ),
@@ -1385,7 +954,9 @@ class DeviceListPage extends StatelessWidget {
                   ? null
                   : () async {
                       Navigator.pop(ctx);
-                      await _copyWordsToDevice(context, fromDeviceId, selectedDeviceId!, fromDeviceName, selectedDeviceName ?? selectedDeviceId!);
+                      // [추가] async gap 이후 context 사용 보호
+                      if (!context.mounted) return;
+                      await _copyWordsToDevice(context, fromDeviceId, selectedDeviceId!, fromDeviceName, selectedDeviceId!);
                     },
               child: const Text('복사'),
             ),
@@ -1468,69 +1039,16 @@ class WordAdminPage extends StatefulWidget {
 }
 
 class _WordAdminPageState extends State<WordAdminPage> {
-  final _formKey = GlobalKey<FormState>();
-  final TextEditingController _engController = TextEditingController();
-  final TextEditingController _posController = TextEditingController();
-  final TextEditingController _korController = TextEditingController();
+  // [삭제] 더 이상 사용되지 않는 필드 제거
+  // final _formKey = GlobalKey<FormState>();
+  // final TextEditingController _engController = TextEditingController();
+  // final TextEditingController _posController = TextEditingController();
+  // final TextEditingController _korController = TextEditingController();
 
   String get _wordsPath => 'devices/${widget.deviceId}/words';
 
-  Future<void> _addWord() async {
-    if (_formKey.currentState!.validate()) {
-      final eng = _engController.text.trim();
-      final pos = _posController.text.trim();
-      final kor = _korController.text.trim();
-      
-      debugPrint('🔍 [DEBUG] 단어 추가 시도 - 영어: $eng, 품사: $pos, 뜻: $kor');
-      debugPrint('🔍 [DEBUG] 단어 경로: $_wordsPath');
-      
-      try {
-        // 중복 단어 체크 (기기별)
-        debugPrint('🔍 [DEBUG] 중복 체크 중...');
-        final dup = await FirebaseFirestore.instance
-            .collection(_wordsPath)
-            .where('englishWord', isEqualTo: eng)
-            .get();
-        
-        debugPrint('🔍 [DEBUG] 중복 체크 결과: ${dup.docs.length}개 발견');
-        
-        if (dup.docs.isNotEmpty) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('이미 등록된 단어입니다.')),
-          );
-          return;
-        }
-        
-        // 중복이 아니면 추가
-        debugPrint('🔍 [DEBUG] 단어 추가 중...');
-        final docRef = await FirebaseFirestore.instance.collection(_wordsPath).add({
-          'englishWord': eng,
-          'koreanPartOfSpeech': pos,
-          'koreanMeaning': kor,
-          'inputTimestamp': FieldValue.serverTimestamp(),
-          'isFavorite': false,
-        });
-        
-        debugPrint('🔍 [DEBUG] 단어 추가 완료 - 문서 ID: ${docRef.id}');
-        
-        _engController.clear();
-        _posController.clear();
-        _korController.clear();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('단어가 추가되었습니다.')),
-        );
-        setState(() {});
-      } catch (e) {
-        debugPrint('🔍 [DEBUG] 단어 추가 실패: $e');
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('추가 실패: $e')),
-        );
-      }
-    }
-  }
+  // [추가] 선택된 단어 ID 목록
+  final Set<String> _selectedWordIds = {};
 
   void _handleCsvAddResult(BuildContext dialogContext, int success, int duplicate, int fail) {
     Navigator.of(dialogContext).pop();
@@ -1578,6 +1096,9 @@ class _WordAdminPageState extends State<WordAdminPage> {
                 final eng = parts[0].trim();
                 final pos = parts[1].trim();
                 final kor = parts[2].trim();
+                // [추가] 예문, 예문해석은 없으면 null로 처리
+                final sentence = parts.length > 3 ? parts[3].trim() : null;
+                final sentenceKor = parts.length > 4 ? parts[4].trim() : null;
                 try {
                   final dup = await FirebaseFirestore.instance
                       .collection(_wordsPath)
@@ -1591,8 +1112,9 @@ class _WordAdminPageState extends State<WordAdminPage> {
                     'englishWord': eng,
                     'koreanPartOfSpeech': pos,
                     'koreanMeaning': kor,
+                    'sentence': sentence,
+                    'sentenceKor': sentenceKor,
                     'inputTimestamp': FieldValue.serverTimestamp(),
-                    'isFavorite': false,
                   });
                   success++;
                 } catch (e) {
@@ -1611,64 +1133,64 @@ class _WordAdminPageState extends State<WordAdminPage> {
   }
 
   // 테스트용 단어 데이터 생성
-  Future<void> _addTestWords() async {
-    debugPrint('🔍 [DEBUG] 테스트 단어 추가 시작');
+  // Future<void> _addTestWords() async {
+  //   debugPrint('🔍 [DEBUG] 테스트 단어 추가 시작');
     
-    final testWords = [
-      {'english': 'apple', 'pos': '명사', 'meaning': '사과'},
-      {'english': 'run', 'pos': '동사', 'meaning': '달리다'},
-      {'english': 'beautiful', 'pos': '형용사', 'meaning': '아름다운'},
-      {'english': 'quickly', 'pos': '부사', 'meaning': '빠르게'},
-      {'english': 'book', 'pos': '명사', 'meaning': '책'},
-    ];
+  //   final testWords = [
+  //     {'english': 'apple', 'pos': '명사', 'meaning': '사과'},
+  //     {'english': 'run', 'pos': '동사', 'meaning': '달리다'},
+  //     {'english': 'beautiful', 'pos': '형용사', 'meaning': '아름다운'},
+  //     {'english': 'quickly', 'pos': '부사', 'meaning': '빠르게'},
+  //     {'english': 'book', 'pos': '명사', 'meaning': '책'},
+  //   ];
     
-    int success = 0;
-    int duplicate = 0;
+  //   int success = 0;
+  //   int duplicate = 0;
     
-    for (final word in testWords) {
-      try {
-        debugPrint('🔍 [DEBUG] 테스트 단어 추가 중: ${word['english']}');
+  //   for (final word in testWords) {
+  //     try {
+  //       debugPrint('🔍 [DEBUG] 테스트 단어 추가 중: ${word['english']}');
         
-        // 중복 체크
-        final dup = await FirebaseFirestore.instance
-            .collection(_wordsPath)
-            .where('englishWord', isEqualTo: word['english'])
-            .get();
+  //       // 중복 체크
+  //       final dup = await FirebaseFirestore.instance
+  //           .collection(_wordsPath)
+  //           .where('englishWord', isEqualTo: word['english'])
+  //           .get();
         
-        if (dup.docs.isNotEmpty) {
-          debugPrint('🔍 [DEBUG] 중복 단어: ${word['english']}');
-          duplicate++;
-          continue;
-        }
+  //       if (dup.docs.isNotEmpty) {
+  //         debugPrint('🔍 [DEBUG] 중복 단어: ${word['english']}');
+  //         duplicate++;
+  //         continue;
+  //       }
         
-        // 단어 추가
-        final docRef = await FirebaseFirestore.instance.collection(_wordsPath).add({
-          'englishWord': word['english'],
-          'koreanPartOfSpeech': word['pos'],
-          'koreanMeaning': word['meaning'],
-          'inputTimestamp': FieldValue.serverTimestamp(),
-          'isFavorite': false,
-        });
+  //       // 단어 추가
+  //       final docRef = await FirebaseFirestore.instance.collection(_wordsPath).add({
+  //         'englishWord': word['english'],
+  //         'koreanPartOfSpeech': word['pos'],
+  //         'koreanMeaning': word['meaning'],
+  //         'inputTimestamp': FieldValue.serverTimestamp(),
+  //         'isFavorite': false,
+  //       });
         
-        debugPrint('🔍 [DEBUG] 테스트 단어 추가 완료: ${word['english']} (ID: ${docRef.id})');
-        success++;
+  //       debugPrint('🔍 [DEBUG] 테스트 단어 추가 완료: ${word['english']} (ID: ${docRef.id})');
+  //       success++;
         
-      } catch (e) {
-        debugPrint('🔍 [DEBUG] 테스트 단어 추가 실패: ${word['english']} - $e');
-      }
-    }
+  //     } catch (e) {
+  //       debugPrint('🔍 [DEBUG] 테스트 단어 추가 실패: ${word['english']} - $e');
+  //     }
+  //   }
     
-    debugPrint('🔍 [DEBUG] 테스트 단어 추가 완료 - 성공: $success, 중복: $duplicate');
+  //   debugPrint('�� [DEBUG] 테스트 단어 추가 완료 - 성공: $success, 중복: $duplicate');
     
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('테스트 단어 추가 완료: 성공 $success개, 중복 $duplicate개'),
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    }
-  }
+  //   if (mounted) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: Text('테스트 단어 추가 완료: 성공 $success개, 중복 $duplicate개'),
+  //         duration: const Duration(seconds: 3),
+  //       ),
+  //     );
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -1677,80 +1199,40 @@ class _WordAdminPageState extends State<WordAdminPage> {
         title: Text('${widget.deviceName} - 단어 관리'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          // [추가] 단어 추가 버튼
           IconButton(
-            icon: const Icon(Icons.science),
-            onPressed: _addTestWords,
-            tooltip: '테스트 단어 추가',
+            icon: const Icon(Icons.add),
+            tooltip: '단어 추가',
+            onPressed: _showAddWordDialog,
           ),
+          // [추가] 선택 삭제 버튼
           IconButton(
-            icon: const Icon(Icons.file_upload),
-            onPressed: _showCsvDialog,
-            tooltip: 'CSV 대량 추가',
+            icon: const Icon(Icons.delete),
+            tooltip: '선택 삭제',
+            onPressed: _selectedWordIds.isEmpty ? null : _deleteSelectedWords,
+          ),
+          // [추가] 선택 복사 버튼
+          IconButton(
+            icon: const Icon(Icons.copy),
+            tooltip: '선택 복사',
+            onPressed: _selectedWordIds.isEmpty ? null : _showCopySelectedWordsDialog,
+          ),
+          // [삭제] 테스트 단어 추가 버튼 제거
+          // IconButton(
+          //   icon: const Icon(Icons.science),
+          //   onPressed: _addTestWords,
+          //   tooltip: '테스트 단어 추가',
+          // ),
+          // [추가] TSV 대량 추가 버튼
+          IconButton(
+            icon: const Icon(Icons.file_download),
+            onPressed: _showTsvDialog,
+            tooltip: 'TSV 대량 추가',
           ),
         ],
       ),
       body: Column(
           children: [
-          // 단어 추가 폼
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _engController,
-                          decoration: const InputDecoration(
-                            labelText: '영어 단어',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (v) => v == null || v.isEmpty ? '영어 단어 입력' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _posController,
-                          decoration: const InputDecoration(
-                            labelText: '품사',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (v) => v == null || v.isEmpty ? '품사 입력' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                        flex: 2,
-                    child: TextFormField(
-                      controller: _korController,
-                          decoration: const InputDecoration(
-                            labelText: '한글 뜻',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (v) => v == null || v.isEmpty ? '한글 뜻 입력' : null,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                    onPressed: _addWord,
-                      child: const Text('단어 추가'),
-                  ),
-                  ),
-                ],
-              ),
-            ),
-          ),
           // 단어 목록
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
@@ -1794,14 +1276,22 @@ class _WordAdminPageState extends State<WordAdminPage> {
                     final koreanPartOfSpeech = word['koreanPartOfSpeech'] ?? '';
                     final koreanMeaning = word['koreanMeaning'] ?? '';
                     final inputTimestamp = word['inputTimestamp'] as Timestamp?;
-                    final isFavorite = word['isFavorite'] ?? false;
-                    
+                    final isSelected = _selectedWordIds.contains(wordId);
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
-                        leading: Icon(
-                          isFavorite ? Icons.star : Icons.star_border,
-                          color: isFavorite ? Colors.amber : null,
+                        // [변경] 체크박스 추가, 별표 제거
+                        leading: Checkbox(
+                          value: isSelected,
+                          onChanged: (checked) {
+                            setState(() {
+                              if (checked == true) {
+                                _selectedWordIds.add(wordId);
+                              } else {
+                                _selectedWordIds.remove(wordId);
+                              }
+                            });
+                          },
                         ),
                         title: Text(
                           englishWord,
@@ -1824,11 +1314,6 @@ class _WordAdminPageState extends State<WordAdminPage> {
                               _showEditDialog(wordId, englishWord, koreanPartOfSpeech, koreanMeaning);
                             } else if (value == 'delete') {
                               _showDeleteDialog(wordId, englishWord);
-                            } else if (value == 'toggle_favorite') {
-                              await FirebaseFirestore.instance
-                                  .collection(_wordsPath)
-                                  .doc(wordId)
-                                  .update({'isFavorite': !isFavorite});
                             }
                           },
                           itemBuilder: (context) => [
@@ -1839,16 +1324,6 @@ class _WordAdminPageState extends State<WordAdminPage> {
                                   Icon(Icons.edit),
                                   SizedBox(width: 8),
                                   Text('수정'),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'toggle_favorite',
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.star),
-                                  const SizedBox(width: 8),
-                                  Text(isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'),
                                 ],
                               ),
                             ),
@@ -1870,6 +1345,115 @@ class _WordAdminPageState extends State<WordAdminPage> {
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // [추가] 단어 추가 다이얼로그
+  void _showAddWordDialog() {
+    final engController = TextEditingController();
+    final posController = TextEditingController();
+    final korController = TextEditingController();
+    final sentenceController = TextEditingController();
+    final sentenceKorController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('단어 추가'),
+        content: SizedBox(
+          width: 400,
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: engController,
+                  decoration: const InputDecoration(labelText: '영어 단어'),
+                  validator: (v) => v == null || v.isEmpty ? '영어 단어 입력' : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: posController,
+                  decoration: const InputDecoration(labelText: '품사'),
+                  validator: (v) => v == null || v.isEmpty ? '품사 입력' : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: korController,
+                  decoration: const InputDecoration(labelText: '한글 뜻'),
+                  validator: (v) => v == null || v.isEmpty ? '한글 뜻 입력' : null,
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: sentenceController,
+                  decoration: const InputDecoration(labelText: '예문 (선택)'),
+                ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: sentenceKorController,
+                  decoration: const InputDecoration(labelText: '예문 해석 (선택)'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          // [추가] CSV/TSV 삽입 버튼
+          TextButton(
+            onPressed: _showCsvDialog,
+            child: const Text('CSV 붙여넣기'),
+          ),
+          TextButton(
+            onPressed: _showTsvDialog,
+            child: const Text('TSV 붙여넣기'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (!formKey.currentState!.validate()) return;
+              final eng = engController.text.trim();
+              final pos = posController.text.trim();
+              final kor = korController.text.trim();
+              final sentence = sentenceController.text.trim().isEmpty ? null : sentenceController.text.trim();
+              final sentenceKor = sentenceKorController.text.trim().isEmpty ? null : sentenceKorController.text.trim();
+              // [중복 체크]
+              final dup = await FirebaseFirestore.instance
+                  .collection(_wordsPath)
+                  .where('englishWord', isEqualTo: eng)
+                  .get();
+              if (dup.docs.isNotEmpty) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('이미 등록된 단어입니다.')),
+                  );
+                }
+                return;
+              }
+              // [단어 추가]
+              await FirebaseFirestore.instance.collection(_wordsPath).add({
+                'englishWord': eng,
+                'koreanPartOfSpeech': pos,
+                'koreanMeaning': kor,
+                'sentence': sentence,
+                'sentenceKor': sentenceKor,
+                'inputTimestamp': FieldValue.serverTimestamp(),
+              });
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('단어가 추가되었습니다.')),
+                );
+              }
+              setState(() {});
+            },
+            child: const Text('추가'),
           ),
         ],
       ),
@@ -1967,6 +1551,218 @@ class _WordAdminPageState extends State<WordAdminPage> {
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
+
+  // [추가] 선택된 단어 일괄 삭제
+  Future<void> _deleteSelectedWords() async {
+    if (_selectedWordIds.isEmpty) return;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('선택 삭제'),
+        content: Text('선택한 ${_selectedWordIds.length}개의 단어를 삭제하시겠습니까?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('삭제')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final batch = FirebaseFirestore.instance.batch();
+    for (final wordId in _selectedWordIds) {
+      final ref = FirebaseFirestore.instance.collection(_wordsPath).doc(wordId);
+      batch.delete(ref);
+    }
+    await batch.commit();
+    setState(() {
+      _selectedWordIds.clear();
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('선택한 단어 ${_selectedWordIds.length}개가 삭제되었습니다.')),
+      );
+    }
+  }
+
+  // [추가] 선택된 단어 복사 다이얼로그
+  void _showCopySelectedWordsDialog() async {
+    // 본인 소유 기기 목록 조회
+    final devicesSnapshot = await FirebaseFirestore.instance
+        .collection('devices')
+        .get();
+    final devices = devicesSnapshot.docs
+        .where((doc) => doc.id != widget.deviceId)
+        .toList();
+    if (devices.isEmpty) {
+      // builder의 ctx만 사용
+      await showDialog(
+        context: context,
+        builder: (ctx) => const AlertDialog(
+          title: Text('단어 복사'),
+          content: Text('복사할 대상 기기가 없습니다.'),
+        ),
+      );
+      return;
+    }
+    String? selectedDeviceId;
+    // showDialog를 await로 받아서 복사 실행
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('선택한 단어 복사'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('선택한 단어를 복사할 기기를 선택하세요.'),
+              const SizedBox(height: 16),
+              DropdownButton<String>(
+                isExpanded: true,
+                value: selectedDeviceId,
+                hint: const Text('대상 기기 선택'),
+                items: devices.map((doc) {
+                  final data = doc.data();
+                  final name = data['deviceName'] ?? doc.id;
+                  return DropdownMenuItem<String>(
+                    value: doc.id,
+                    child: Text('$name (${doc.id})'),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  setState(() {
+                    selectedDeviceId = val;
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('취소'),
+            ),
+            ElevatedButton(
+              onPressed: selectedDeviceId == null
+                  ? null
+                  : () => Navigator.pop(ctx, selectedDeviceId),
+              child: const Text('복사'),
+            ),
+          ],
+        ),
+      ),
+    );
+    // async gap 이후 context 사용 전 반드시 mounted 체크
+    if (!mounted) return;
+    if (result != null) {
+      if (!mounted) return; // await 이후 context 사용 전 추가 체크
+      _handleCopySelectedWords(result, devices);
+    }
+  }
+
+  // async gap 이후 context 사용을 분리한 함수
+  Future<void> _handleCopySelectedWords(String toDeviceId, List devices) async {
+    final toDeviceName = devices.firstWhere((d) => d.id == toDeviceId).data()['deviceName'] ?? toDeviceId;
+    await _copySelectedWordsToDevice(toDeviceId, toDeviceName);
+  }
+
+  // [추가] 선택된 단어 복사 실행
+  Future<void> _copySelectedWordsToDevice(String toDeviceId, String toDeviceName) async {
+    final firestore = FirebaseFirestore.instance;
+    final selectedWordsSnap = await firestore.collection(_wordsPath).where(FieldPath.documentId, whereIn: _selectedWordIds.toList()).get();
+    final toWordsSnap = await firestore.collection('devices/$toDeviceId/words').get();
+    final toWords = toWordsSnap.docs.map((d) => d.data()['englishWord'] as String?).toSet();
+    int copied = 0;
+    final batch = firestore.batch();
+    for (final doc in selectedWordsSnap.docs) {
+      final data = doc.data();
+      final eng = data['englishWord'] ?? '';
+      if (eng.isEmpty || toWords.contains(eng)) continue; // 중복 방지
+      final newDoc = firestore.collection('devices/$toDeviceId/words').doc();
+      batch.set(newDoc, data);
+      copied++;
+    }
+    await batch.commit();
+    if (!mounted) return; // setState와 context 사용 전 mounted 체크
+    setState(() {
+      _selectedWordIds.clear();
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('선택한 단어 $copied개가 [$toDeviceName]로 복사되었습니다.')),
+      );
+    }
+  }
+
+  // [추가] TSV 붙여넣기 다이얼로그
+  void _showTsvDialog() {
+    final tsvController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('TSV 붙여넣기 (영어\t품사\t뜻)'),
+        content: SizedBox(
+          width: 400,
+          child: TextField(
+            controller: tsvController,
+            maxLines: 12,
+            decoration: const InputDecoration(
+              hintText: '예시: apple\t명사\t사과\trun\t동사\t달리다',
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('취소'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final lines = tsvController.text.trim().split('\n');
+              int success = 0, duplicate = 0, fail = 0;
+              for (final line in lines) {
+                if (line.trim().isEmpty) continue;
+                final parts = line.split('\t');
+                if (parts.length < 3) {
+                  fail++;
+                  continue;
+                }
+                final eng = parts[0].trim();
+                final pos = parts[1].trim();
+                final kor = parts[2].trim();
+                // [추가] 예문, 예문해석은 없으면 null로 처리
+                final sentence = parts.length > 3 ? parts[3].trim() : null;
+                final sentenceKor = parts.length > 4 ? parts[4].trim() : null;
+                try {
+                  final dup = await FirebaseFirestore.instance
+                      .collection(_wordsPath)
+                      .where('englishWord', isEqualTo: eng)
+                      .get();
+                  if (dup.docs.isNotEmpty) {
+                    duplicate++;
+                    continue;
+                  }
+                  await FirebaseFirestore.instance.collection(_wordsPath).add({
+                    'englishWord': eng,
+                    'koreanPartOfSpeech': pos,
+                    'koreanMeaning': kor,
+                    'sentence': sentence,
+                    'sentenceKor': sentenceKor,
+                    'inputTimestamp': FieldValue.serverTimestamp(),
+                  });
+                  success++;
+                } catch (e) {
+                  fail++;
+                }
+              }
+              if (ctx.mounted) {
+                _handleCsvAddResult(ctx, success, duplicate, fail);
+              }
+            },
+            child: const Text('추가'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class AdminManagementPage extends StatelessWidget {
@@ -2015,7 +1811,7 @@ class AdminManagementPage extends StatelessWidget {
                           children: [
                             Text('신청자: $ownerEmail'),
                             if (requestedAt != null)
-                              Text('신청일: [33m${_formatDate(requestedAt.toDate())}[0m'),
+                              Text('신청일:  [33m${_formatDate(requestedAt.toDate())} [0m'),
                           ],
                         ),
                         trailing: Row(
